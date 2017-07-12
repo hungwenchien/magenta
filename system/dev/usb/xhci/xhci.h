@@ -177,7 +177,7 @@ struct xhci {
     mx_vaddr_t scratch_pad_index_virt;
 };
 
-mx_status_t xhci_init(xhci_t* xhci, void* mmio);
+mx_status_t xhci_init(xhci_t* xhci, void* mmio, mx_handle_t bti);
 int xhci_get_ep_ctx_state(xhci_endpoint_t* ep);
 mx_status_t xhci_start(xhci_t* xhci);
 void xhci_handle_interrupt(xhci_t* xhci, bool legacy);
