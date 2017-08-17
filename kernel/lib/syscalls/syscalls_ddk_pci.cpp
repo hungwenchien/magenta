@@ -330,6 +330,42 @@ mx_status_t sys_pci_get_nth_device(mx_handle_t hrsrc,
     return MX_OK;
 }
 
+mx_status_t sys_pci_config_read(mx_handle_t handle, uint16_t offset, size_t width,
+                                user_ptr<uint32_t> out_val) {
+    mxtl::RefPtr<PciDeviceDispatcher> pci_device;
+    mxtl::RefPtr<Dispatcher> dispatcher;
+
+    if (handle == MX_HANDLE_INVALID) {
+        return MX_ERR_BAD_HANDLE;
+    }
+
+    if (out_val.get() == nullptr) {
+        return MX_ERR_INVALID_ARGS;
+    }
+
+    // Get the PciDeviceDispatcher from the handle passed in via the pci protocol
+    auto up = ProcessDispatcher::GetCurrent();
+    mx_status_t status = up->GetDispatcherWithRights(handle, MX_RIGHT_READ | MX_RIGHT_WRITE,
+                                                    &pci_device);
+    if (status != MX_OK) {
+        return status;
+    }
+
+    // Based on the width passed in we can use the type safety of the PciConfig layer
+    // to ensure we're getting correctly sized data back and return errors in the PIO
+    // cases.
+    auto config = pci_device->device()->config();
+    switch(width) {
+    case 8u:  return out_val.copy_to_user(static_cast<uint32_t>(config->Read(PciReg8(offset))));
+    case 16u: return out_val.copy_to_user(static_cast<uint32_t>(config->Read(PciReg16(offset))));
+    case 32u: return out_val.copy_to_user(config->Read(PciReg32(offset)));
+    default: return MX_ERR_INVALID_ARGS;
+    }
+
+    // If we reached this point then the width was invalid.
+    return MX_ERR_INVALID_ARGS;
+}
+
 /* This is a transitional method to bootstrap legacy PIO access before
  * PCI moves to userspace.
  */
@@ -710,6 +746,16 @@ mx_status_t sys_pci_init(mx_handle_t, user_ptr<const mx_pci_init_arg_t>, uint32_
 }
 
 mx_status_t sys_pci_add_subtract_io_range(mx_handle_t handle, bool mmio, uint64_t base, uint64_t len, bool add) {
+    return MX_ERR_NOT_SUPPORTED;
+}
+
+mx_status_t sys_pci_config_read(mx_handle_t handle, uint16_t offset, size_t width,
+                                user_ptr<uint32_t> out_val) {
+    return MX_ERR_NOT_SUPPORTED;
+}
+
+mx_status_t sys_pci_cfg_pio_rw(mx_handle_t handle, uint8_t bus, uint8_t dev, uint8_t func,
+                               uint8_t offset, user_ptr<uint32_t> val, size_t width, bool write) {
     return MX_ERR_NOT_SUPPORTED;
 }
 

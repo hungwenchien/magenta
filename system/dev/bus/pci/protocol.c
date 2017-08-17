@@ -6,6 +6,7 @@
 
 #include <assert.h>
 #include <limits.h>
+#include <magenta/assert.h>
 #include <magenta/process.h>
 
 #include "kpci-private.h"
@@ -49,6 +50,46 @@ static mx_status_t do_resource_bookkeeping(mx_pci_resource_t* res) {
     }
 
     return status;
+}
+
+
+// These reads are proxied directly over to the device's PciConfig object so the validity of the
+// widths and offsets will be validated on that end and then trickle back to this level of the
+// protocol.
+//
+// In the case of config and capability reads/writes, failure is a catastrophic occurrence
+// along the lines of hardware failure or a device being removed from the bus. Due to this,
+// those statuses will be asserted upon rather than forcing callers to add additional checks
+// every time they wish to do a config read / write.
+static uint32_t kpci_config_read(void* ctx, uint8_t offset, size_t width) {
+    MX_DEBUG_ASSERT(ctx);
+    kpci_device_t* device = ctx;
+    uint32_t val;
+
+    mx_status_t status = mx_pci_config_read(device->handle, offset, width, &val);
+    MX_DEBUG_ASSERT_MSG(status == MX_OK, "pci_config_read: %d\n", status);
+    return val;
+}
+
+static uint8_t kpci_get_next_capability(void* ctx, uint8_t offset, uint8_t type) {
+    uint8_t cap_offset = offset;
+    uint8_t limit = 64;
+
+    // Walk the capability list looking for the type requested, starting at the offset
+    // passed in. limit acts as a barrier in case of an invalid capability pointer list
+    // that causes us to iterate forever otherwise.
+    while (cap_offset != 0 && limit--) {
+        uint8_t type_id = (uint8_t)kpci_config_read(ctx, cap_offset, 8);
+        if (type_id == type) {
+            return cap_offset;
+        }
+
+        // We didn't find the right type, move on
+        cap_offset = (uint8_t)kpci_config_read(ctx, cap_offset + 1, 8);
+    }
+
+    // No more entries are in the list
+    return 0;
 }
 
 static mx_status_t pci_get_resource(void* ctx, uint32_t res_id, mx_pci_resource_t* out_res) {
@@ -193,4 +234,6 @@ static pci_protocol_ops_t _pci_protocol = {
     .query_irq_mode_caps = kpci_query_irq_mode_caps,
     .set_irq_mode = kpci_set_irq_mode,
     .get_device_info = kpci_get_device_info,
+    .config_read = kpci_config_read,
+    .get_next_capability = kpci_get_next_capability,
 };

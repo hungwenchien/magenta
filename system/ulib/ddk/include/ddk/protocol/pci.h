@@ -28,6 +28,16 @@ enum pci_resource_ids {
     PCI_RESOURCE_COUNT,
 };
 
+enum pci_header_fields {
+    kPciCfgVendorId = 0x00,
+    kPciCfgDeviceId = 0x02,
+    kPciCfgRevisionId = 0x08,
+    kPciCfgClassCode = 0x09,
+    kPciCfgSubsystemVendorId = 0x2C,
+    kPciCfgSubsystemId = 0x2E,
+    kPciCfgCapabilitiesPtr = 0x34,
+};
+
 typedef struct pci_protocol_ops {
     mx_status_t (*map_resource)(void* ctx, uint32_t res_id, uint32_t cache_policy,
                                 void** vaddr, size_t* size, mx_handle_t* out_handle);
@@ -40,6 +50,8 @@ typedef struct pci_protocol_ops {
     mx_status_t (*set_irq_mode)(void* ctx, mx_pci_irq_mode_t mode,
                                 uint32_t requested_irq_count);
     mx_status_t (*get_device_info)(void* ctx, mx_pcie_device_info_t* out_info);
+    uint32_t    (*config_read)(void* ctx, uint8_t offset, size_t width);
+    uint8_t     (*get_next_capability)(void* ctx, uint8_t type, uint8_t offset);
 } pci_protocol_ops_t;
 
 typedef struct pci_protocol {
@@ -83,6 +95,30 @@ static inline mx_status_t pci_set_irq_mode(pci_protocol_t* pci, mx_pci_irq_mode_
 static inline mx_status_t pci_get_device_info(pci_protocol_t* pci,
                                               mx_pcie_device_info_t* out_info) {
     return pci->ops->get_device_info(pci->ctx, out_info);
+}
+
+static inline uint8_t pci_config_read8(pci_protocol_t* pci, uint8_t offset) {
+    return (uint8_t)(pci->ops->config_read(pci->ctx, offset, 8u) & 0XFF);
+}
+
+static inline uint16_t pci_config_read16(pci_protocol_t* pci, uint8_t offset) {
+    return (uint16_t)(pci->ops->config_read(pci->ctx, offset, 16u) & 0xFFFF);
+}
+
+static inline uint32_t pci_config_read32(pci_protocol_t* pci, uint8_t offset) {
+    return pci->ops->config_read(pci->ctx, offset, 32u);
+}
+
+static uint8_t pci_get_next_capability(pci_protocol_t* pci, uint8_t type, uint8_t offset) {
+    return pci->ops->get_next_capability(pci->ctx, type, offset);
+}
+
+static uint8_t pci_get_first_capability(pci_protocol_t* pci, uint8_t type) {
+    // TODO(cja): This will need to change when config reads are limited to outside
+    // header space. Perhaps the Caps ptr can be placed in the structure returned by
+    // get_device_info?
+    uint8_t offset = pci_config_read8(pci, kPciCfgCapabilitiesPtr);
+    return pci_get_next_capability(pci, offset, type);
 }
 
 __END_CDECLS;
