@@ -51,6 +51,28 @@ static mx_status_t do_resource_bookkeeping(mx_pci_resource_t* res) {
     return status;
 }
 
+
+// These reads are proxied directly over to the device's PciConfig object so the validity of the
+// widths and offsets will be validated on that end and then trickle back to this level of the
+// protocol.
+static mx_status_t pci_config_read(void* ctx, uint16_t offset, size_t width, uint32_t* out_val) {
+    kpci_device_t* device = ctx;
+
+    return mx_pci_config_read(device->handle, offset, width, out_val);
+}
+
+static mx_status_t pci_config_read8(void* ctx, uint16_t offset, uint8_t* out_val) {
+    return pci_config_read(ctx, offset, 8u, (uint32_t*)out_val);
+}
+
+static mx_status_t pci_config_read16(void* ctx, uint16_t offset, uint16_t* out_val) {
+    return pci_config_read(ctx, offset, 16u, (uint32_t*)out_val);
+}
+
+static mx_status_t pci_config_read32(void* ctx, uint16_t offset, uint32_t* out_val) {
+    return pci_config_read(ctx, offset, 32u, out_val);
+}
+
 static mx_status_t pci_get_resource(void* ctx, uint32_t res_id, mx_pci_resource_t* out_res) {
     mx_status_t status = MX_OK;
 
