@@ -120,7 +120,7 @@ VmxPage::~VmxPage() {
 
 struct vmxon_context {
     fbl::Array<VmxPage>* vmxon_pages;
-    fbl::atomic<mp_cpu_mask_t> cpu_mask;
+    fbl::atomic<cpu_mask_t> cpu_mask;
 
     vmxon_context(fbl::Array<VmxPage>* vp)
         : vmxon_pages(vp), cpu_mask(0) {}
@@ -230,9 +230,9 @@ mx_status_t VmxCpuState::Create(fbl::unique_ptr<VmxCpuState>* out) {
 
     // Enable VMX for all online CPUs.
     vmxon_context vmxon_ctx(&vmxon_pages);
-    mp_cpu_mask_t online_mask = mp_get_online_mask();
+    cpu_mask_t online_mask = mp_get_online_mask();
     mp_sync_exec(MP_IPI_TARGET_MASK, online_mask, vmxon_task, &vmxon_ctx);
-    mp_cpu_mask_t cpu_mask = vmxon_ctx.cpu_mask.load();
+    cpu_mask_t cpu_mask = vmxon_ctx.cpu_mask.load();
     if (cpu_mask != online_mask) {
         mp_sync_exec(MP_IPI_TARGET_MASK, cpu_mask, vmxoff_task, nullptr);
         return MX_ERR_NOT_SUPPORTED;

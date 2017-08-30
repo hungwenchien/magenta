@@ -6,11 +6,11 @@
 #pragma once
 
 #include <magenta/compiler.h>
-#include <kernel/mp.h>
+#include <kernel/cpu.h>
 
 __BEGIN_CDECLS
 
 void x86_mmu_mem_type_init(void);
-void x86_pat_sync(mp_cpu_mask_t targets);
+void x86_pat_sync(cpu_mask_t targets);
 
 __END_CDECLS
