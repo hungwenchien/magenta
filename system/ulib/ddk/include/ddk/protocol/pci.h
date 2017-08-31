@@ -38,7 +38,31 @@ enum pci_header_fields {
     kPciCfgCapabilitiesPtr = 0x34,
 };
 
+enum pci_cap_types {
+    kPciCapIdNull = 0x00,
+    kPciCapIdPciPwrMgmt = 0x01,
+    kPciCapIdAgp = 0x02,
+    kPciCapIdVpd = 0x03,
+    kPciCapIdMsi = 0x05,
+    kPciCapIdPcix = 0x07,
+    kPciCapIdHypertransport = 0x08,
+    kPciCapIdVendor = 0x09,
+    kPciCapIdDebugPort = 0x0A,
+    kPciCapIdCompactPciCrc = 0x0B,
+    kPciCapIdPciHotplug = 0x0C,
+    kPciCapIdPciBridgeSubsystemVid = 0x0D,
+    kPciCapIdAgp8x = 0x0E,
+    kPciCapIdSecureDevice = 0x0F,
+    kPciCapIdPciExpress = 0x10,
+    kPciCapIdMsix = 0x11,
+    kPciCapIdSataDataNdxCfg = 0x12,
+    kPciCapIdAdvancedFeatures = 0x13,
+    PciCapIdEnhancedAllocation = 0x14,
+};
+
+
 typedef struct pci_protocol_ops {
+    mx_status_t (*get_resource)(void* ctx, uint32_t res_id,  mx_pci_resource_t* out_res);
     mx_status_t (*map_resource)(void* ctx, uint32_t res_id, uint32_t cache_policy,
                                 void** vaddr, size_t* size, mx_handle_t* out_handle);
     mx_status_t (*enable_bus_master)(void* ctx, bool enable);
@@ -58,6 +82,11 @@ typedef struct pci_protocol {
     pci_protocol_ops_t* ops;
     void* ctx;
 } pci_protocol_t;
+
+static inline mx_status_t pci_get_resource(pci_protocol_t* pci, uint32_t res_id,
+                                           mx_pci_resource_t* out_info) {
+    return pci->ops->get_resource(pci->ctx, res_id, out_info);
+}
 
 static inline mx_status_t pci_map_resource(pci_protocol_t* pci, uint32_t res_id,
                                            uint32_t cache_policy, void** vaddr, size_t* size,
@@ -114,11 +143,10 @@ static uint8_t pci_get_next_capability(pci_protocol_t* pci, uint8_t type, uint8_
 }
 
 static uint8_t pci_get_first_capability(pci_protocol_t* pci, uint8_t type) {
-    // TODO(cja): This will need to change when config reads are limited to outside
-    // header space. Perhaps the Caps ptr can be placed in the structure returned by
-    // get_device_info?
-    uint8_t offset = pci_config_read8(pci, kPciCfgCapabilitiesPtr);
-    return pci_get_next_capability(pci, offset, type);
+    // the next_capability method will always look at the second byte next
+    // pointer to fetch the next capability. By offsetting the CapPtr field
+    // by -1 we can pretend we're working with a normal capability entry
+    return pci_get_next_capability(pci, kPciCfgCapabilitiesPtr - 1u, type);
 }
 
 __END_CDECLS;

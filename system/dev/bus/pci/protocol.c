@@ -72,7 +72,7 @@ static uint32_t kpci_config_read(void* ctx, uint8_t offset, size_t width) {
 }
 
 static uint8_t kpci_get_next_capability(void* ctx, uint8_t offset, uint8_t type) {
-    uint8_t cap_offset = offset;
+    uint8_t cap_offset = (uint8_t)kpci_config_read(ctx, offset + 1, 8);
     uint8_t limit = 64;
 
     // Walk the capability list looking for the type requested, starting at the offset
@@ -80,7 +80,9 @@ static uint8_t kpci_get_next_capability(void* ctx, uint8_t offset, uint8_t type)
     // that causes us to iterate forever otherwise.
     while (cap_offset != 0 && limit--) {
         uint8_t type_id = (uint8_t)kpci_config_read(ctx, cap_offset, 8);
+        printf("kpci_get_next_capability loop offset %u, type %u\n", cap_offset, type_id);
         if (type_id == type) {
+            printf("kpci_get_next_capability: returning %u\n", cap_offset);
             return cap_offset;
         }
 
@@ -92,10 +94,11 @@ static uint8_t kpci_get_next_capability(void* ctx, uint8_t offset, uint8_t type)
     return 0;
 }
 
-static mx_status_t pci_get_resource(void* ctx, uint32_t res_id, mx_pci_resource_t* out_res) {
+static mx_status_t kpci_get_resource(void* ctx, uint32_t res_id, mx_pci_resource_t* out_res) {
     mx_status_t status = MX_OK;
 
     if (!out_res || res_id >= PCI_RESOURCE_COUNT) {
+        printf("????\n");
         return MX_ERR_INVALID_ARGS;
     }
 
@@ -139,7 +142,7 @@ static mx_status_t kpci_map_resource(void* ctx,
     }
 
     mx_pci_resource_t resource;
-    mx_status_t status = pci_get_resource(ctx, res_id, &resource);
+    mx_status_t status = kpci_get_resource(ctx, res_id, &resource);
     if (status != MX_OK) {
         return status;
     }
@@ -229,6 +232,7 @@ static pci_protocol_ops_t _pci_protocol = {
     .enable_bus_master = kpci_enable_bus_master,
     .enable_pio = kpci_enable_pio,
     .reset_device = kpci_reset_device,
+    .get_resource = kpci_get_resource,
     .map_resource = kpci_map_resource,
     .map_interrupt = kpci_map_interrupt,
     .query_irq_mode_caps = kpci_query_irq_mode_caps,

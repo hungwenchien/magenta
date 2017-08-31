@@ -23,7 +23,7 @@ public:
     mx_device_t* bus_device() { return bus_device_; }
     mx_device_t* device() { return device_; }
 
-    virtual mx_status_t Bind(pci_protocol_t*, mx_handle_t pci_config_handle, const pci_config_t*);
+    virtual mx_status_t Bind(pci_protocol_t*, mx_pcie_device_info_t info);
     virtual mx_status_t Init() = 0;
     virtual void Unbind();
     virtual void Release();
@@ -60,9 +60,8 @@ protected:
 
     // handles to pci bits
     pci_protocol_t pci_ = { nullptr, nullptr };
-    mx::handle pci_config_handle_ = {};
-    const pci_config_t* pci_config_ = nullptr;
     mx::handle irq_handle_ = {};
+    mx_pcie_device_info_t info_;
 
     // bar0 memory map or PIO
     uint32_t bar0_pio_base_ = 0;
