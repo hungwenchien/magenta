@@ -144,6 +144,6 @@ platform = {
                 length = 0x100000
             }
         }
-        irqs = [191]
+        irqs = [191, 193]
     }
 }

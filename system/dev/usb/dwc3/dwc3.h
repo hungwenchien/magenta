@@ -82,6 +82,10 @@ typedef struct {
     mx_handle_t irq_handle;
     thrd_t irq_thread;
 
+    // OTG stuff
+    mx_handle_t otg_irq_handle;
+    thrd_t otg_irq_thread;
+
     dwc3_endpoint_t eps[DWC3_MAX_EPS];
 
     // connection state
@@ -147,6 +151,9 @@ void dwc3_ep0_xfer_complete(dwc3_t* dwc, unsigned ep_num);
 
 // Events
 void dwc3_events_start(dwc3_t* dwc);
+
+// OTG
+void dwc3_otg_start(dwc3_t* dwc);
 
 // Utils
 void dwc3_wait_bits(volatile uint32_t* ptr, uint32_t bits, uint32_t expected);

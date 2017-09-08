@@ -26,6 +26,7 @@ enum {
 // IRQ indices
 enum {
     IRQ_USB3,
+    IRQ_USB3_OTG,
 };
 
 void dwc3_wait_bits(volatile uint32_t* ptr, uint32_t bits, uint32_t expected) {
@@ -105,6 +106,7 @@ static mx_status_t dwc3_start(dwc3_t* dwc) {
     DWC3_WRITE32(mmio + DCFG, temp);
 
     dwc3_events_start(dwc);
+    dwc3_otg_start(dwc);
     mtx_unlock(&dwc->lock);
 
     dwc3_ep0_start(dwc);
@@ -270,6 +272,8 @@ static void dwc3_unbind(void* ctx) {
 
     mx_interrupt_signal(dwc->irq_handle);
     thrd_join(dwc->irq_thread, NULL);
+    mx_interrupt_signal(dwc->otg_irq_handle);
+    thrd_join(dwc->otg_irq_thread, NULL);
     device_remove(dwc->mxdev);
 }
 
@@ -303,6 +307,7 @@ static void dwc3_release(void* ctx) {
 
     pdev_mmio_buffer_release(&dwc->mmio);
     mx_handle_close(dwc->irq_handle);
+    mx_handle_close(dwc->otg_irq_handle);
     free(dwc);
 }
 
@@ -343,7 +348,13 @@ static mx_status_t dwc3_bind(void* ctx, mx_device_t* dev, void** cookie) {
 
     status = pdev_map_interrupt(&pdev, IRQ_USB3, &dwc->irq_handle);
     if (status != MX_OK) {
-        dprintf(ERROR, "dwc3_bind: pdev_map_interrupt failed\n");
+        dprintf(ERROR, "dwc3_bind: pdev_map_interrupt failed for IRQ_USB3\n");
+        goto fail;
+    }
+
+    status = pdev_map_interrupt(&pdev, IRQ_USB3_OTG, &dwc->otg_irq_handle);
+    if (status != MX_OK) {
+        dprintf(ERROR, "dwc3_bind: pdev_map_interrupt failed for IRQ_USB3_OTG\n");
         goto fail;
     }
 
