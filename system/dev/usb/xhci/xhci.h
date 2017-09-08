@@ -15,6 +15,7 @@
 
 #include <ddk/device.h>
 #include <ddk/protocol/pci.h>
+#include <ddk/protocol/platform-device.h>
 #include <ddk/protocol/usb-bus.h>
 
 #include "xhci-hw.h"
@@ -99,12 +100,17 @@ struct xhci {
 #define INTERRUPTER_COUNT 2
     mx_handle_t irq_handles[INTERRUPTER_COUNT];
     mx_handle_t mmio_handle;
-    mx_handle_t cfg_handle;
     thrd_t irq_thread;
 
     // used by the start thread
     mx_device_t* parent;
+
+    // PCI support
     pci_protocol_t pci;
+    mx_handle_t cfg_handle;
+
+    // platform device support
+    platform_device_protocol_t* pdev;
 
     // MMIO data structures
     xhci_cap_regs_t* cap_regs;
