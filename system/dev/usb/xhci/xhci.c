@@ -468,12 +468,14 @@ mx_status_t xhci_start(xhci_t* xhci) {
     xhci_wait_bits(usbcmd, USBCMD_HCRST, 0);
     xhci_wait_bits(usbsts, USBSTS_CNR, 0);
 
+/*
     // enable bus master
     mx_status_t status = pci_enable_bus_master(&xhci->pci, true);
     if (status < 0) {
         dprintf(ERROR, "usb_xhci_bind enable_bus_master failed %d\n", status);
         return status;
     }
+*/
 
     // setup operational registers
     xhci_op_regs_t* op_regs = xhci->op_regs;

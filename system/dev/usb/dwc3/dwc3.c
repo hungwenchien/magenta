@@ -67,7 +67,7 @@ void dwc3_print_status(dwc3_t* dwc) {
     dprintf(TRACE, "\n");
 }
 
-static mx_status_t dwc3_start(dwc3_t* dwc) {
+static mx_status_t dwc3_start_peripheral_mode(dwc3_t* dwc) {
     volatile void* mmio = dwc3_mmio(dwc);
     uint32_t temp;
 
@@ -118,6 +118,56 @@ static mx_status_t dwc3_start(dwc3_t* dwc) {
 
     return MX_OK;
 }
+
+static mx_status_t dwc3_start_host_mode(dwc3_t* dwc) {
+    volatile void* mmio = dwc3_mmio(dwc);
+    uint32_t temp;
+
+    mtx_lock(&dwc->lock);
+
+    temp = DWC3_READ32(mmio + DCTL);
+    temp &= ~DCTL_RUN_STOP;
+    temp |= DCTL_CSFTRST;
+    DWC3_WRITE32(mmio + DCTL, temp);
+    dwc3_wait_bits(mmio + DCTL, DCTL_CSFTRST, 0);
+
+    // TODO(voydanoff) how much of this is necessary for host mode?
+
+    // configure and enable PHYs
+    temp = DWC3_READ32(mmio + GUSB2PHYCFG(0));
+    temp &= ~(GUSB2PHYCFG_USBTRDTIM_MASK | GUSB2PHYCFG_SUSPENDUSB20);
+    temp |= GUSB2PHYCFG_USBTRDTIM(9);
+    DWC3_WRITE32(mmio + GUSB2PHYCFG(0), temp);
+
+    temp = DWC3_READ32(mmio + GUSB3PIPECTL(0));
+    temp &= ~(GUSB3PIPECTL_DELAYP1TRANS | GUSB3PIPECTL_SUSPENDENABLE);
+    temp |= GUSB3PIPECTL_LFPSFILTER | GUSB3PIPECTL_SS_TX_DE_EMPHASIS(1);
+    DWC3_WRITE32(mmio + GUSB3PIPECTL(0), temp);
+
+    // configure for host mode
+    DWC3_WRITE32(mmio + GCTL, GCTL_U2EXIT_LFPS | GCTL_PRTCAPDIR_HOST | GCTL_U2RSTECN |
+                              GCTL_PWRDNSCALE(2));
+
+    temp = DWC3_READ32(mmio + DCFG);
+    uint32_t nump = 16;
+    uint32_t max_speed = DCFG_DEVSPD_SUPER;
+    temp &= ~DWC3_MASK(DCFG_NUMP_START, DCFG_NUMP_BITS);
+    temp |= nump << DCFG_NUMP_START;
+    temp &= ~DWC3_MASK(DCFG_DEVSPD_START, DCFG_DEVSPD_BITS);
+    temp |= max_speed << DCFG_DEVSPD_START;
+    temp &= ~DWC3_MASK(DCFG_DEVADDR_START, DCFG_DEVADDR_BITS);  // clear address
+    DWC3_WRITE32(mmio + DCFG, temp);
+
+    // start the controller
+    DWC3_WRITE32(mmio + DCTL, DCTL_RUN_STOP);
+
+    mtx_unlock(&dwc->lock);
+
+    dwc3_start_xhci(dwc);
+
+    return MX_OK;
+}
+
 
 void dwc3_usb_reset(dwc3_t* dwc) {
     dprintf(INFO, "dwc3_usb_reset\n");
@@ -234,7 +284,9 @@ static mx_status_t dwc_set_enabled(void* ctx, bool enabled) {
     dwc3_t* dwc = ctx;
 
     if (enabled) {
-        return dwc3_start(dwc);
+//        return dwc3_start_peripheral_mode(dwc);
+return MX_OK;
+
     } else {
         // TODO(voydanoff) more cleanup to do here?
         dwc3_disconnected(dwc);
@@ -308,7 +360,7 @@ static mx_protocol_device_t dwc3_device_proto = {
     .release = dwc3_release,
 };
 
-static mx_status_t dwc3_bind(void* ctx, mx_device_t* dev, void** cookie) {
+static mx_status_t dwc3_bind(void* ctx, mx_device_t* parent, void** cookie) {
     dprintf(INFO, "dwc3_bind\n");
 
     dwc3_t* dwc = calloc(1, sizeof(dwc3_t));
@@ -317,7 +369,7 @@ static mx_status_t dwc3_bind(void* ctx, mx_device_t* dev, void** cookie) {
     }
 
     platform_device_protocol_t pdev;
-    mx_status_t status = device_get_protocol(dev, MX_PROTOCOL_PLATFORM_DEV, &pdev);
+    mx_status_t status = device_get_protocol(parent, MX_PROTOCOL_PLATFORM_DEV, &pdev);
     if (status != MX_OK) {
         goto fail;
     }
@@ -329,6 +381,7 @@ static mx_status_t dwc3_bind(void* ctx, mx_device_t* dev, void** cookie) {
         mtx_init(&ep->lock, mtx_plain);
         list_initialize(&ep->queued_txns);
     }
+    dwc->parent = parent;
 
     status = pdev_map_mmio_buffer(&pdev, MMIO_USB3OTG, MX_CACHE_POLICY_UNCACHED_DEVICE,
                                   &dwc->mmio);
@@ -371,10 +424,12 @@ static mx_status_t dwc3_bind(void* ctx, mx_device_t* dev, void** cookie) {
         .proto_ops = &dwc_dci_protocol,
     };
 
-    status = device_add(dev, &args, &dwc->mxdev);
+    status = device_add(parent, &args, &dwc->mxdev);
     if (status != MX_OK) {
         goto fail;
     }
+
+    dwc3_start_host_mode(dwc);
 
     return MX_OK;
 
