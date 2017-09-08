@@ -5,6 +5,7 @@
 #include <ddk/binding.h>
 #include <ddk/debug.h>
 #include <ddk/driver.h>
+#include <ddk/protocol/platform-devices.h>
 #include <ddk/protocol/usb-hci.h>
 #include <ddk/protocol/usb.h>
 
@@ -25,6 +26,9 @@
 
 #define DEFAULT_PRIORITY 16
 #define HIGH_PRIORITY    24
+
+#define PDEV_MMIO_INDEX  0
+#define PDEV_IRQ_INDEX   0
 
 mx_status_t xhci_add_device(xhci_t* xhci, int slot_id, int hub_address, int speed) {
     dprintf(TRACE, "xhci_add_new_device\n");
@@ -264,18 +268,16 @@ error_return:
     return status;
 }
 
-static mx_status_t usb_xhci_bind(void* ctx, mx_device_t* dev, void** cookie) {
+static mx_status_t usb_xhci_bind_common(mx_device_t* parent, pci_protocol_t* pci) {
+return 0;
+}
+
+static mx_status_t usb_xhci_bind_pci(mx_device_t* parent, pci_protocol_t* pci) {
     mx_handle_t mmio_handle = MX_HANDLE_INVALID;
     mx_handle_t cfg_handle = MX_HANDLE_INVALID;
     xhci_t* xhci = NULL;
     uint32_t num_irq_handles_initialized = 0;
     mx_status_t status;
-
-    pci_protocol_t pci;
-    if (device_get_protocol(dev, MX_PROTOCOL_PCI, &pci)) {
-        status = MX_ERR_NOT_SUPPORTED;
-        goto error_return;
-    }
 
     xhci = calloc(1, sizeof(xhci_t));
     if (!xhci) {
@@ -289,7 +291,7 @@ static mx_status_t usb_xhci_bind(void* ctx, mx_device_t* dev, void** cookie) {
      * eXtensible Host Controller Interface revision 1.1, section 5, xhci
      * should only use BARs 0 and 1. 0 for 32 bit addressing, and 0+1 for 64 bit addressing.
      */
-    status = pci_map_resource(&pci, PCI_RESOURCE_BAR_0, MX_CACHE_POLICY_UNCACHED_DEVICE,
+    status = pci_map_resource(pci, PCI_RESOURCE_BAR_0, MX_CACHE_POLICY_UNCACHED_DEVICE,
                               &mmio, &mmio_len, &mmio_handle);
     if (status != MX_OK) {
         dprintf(ERROR, "usb_xhci_bind could not find bar\n");
@@ -298,7 +300,7 @@ static mx_status_t usb_xhci_bind(void* ctx, mx_device_t* dev, void** cookie) {
     }
 
     uint32_t irq_cnt = 0;
-    status = pci_query_irq_mode_caps(&pci, MX_PCIE_IRQ_MODE_MSI, &irq_cnt);
+    status = pci_query_irq_mode_caps(pci, MX_PCIE_IRQ_MODE_MSI, &irq_cnt);
     if (status != MX_OK) {
         dprintf(ERROR, "pci_query_irq_mode_caps failed %d\n", status);
         goto error_return;
@@ -306,9 +308,9 @@ static mx_status_t usb_xhci_bind(void* ctx, mx_device_t* dev, void** cookie) {
     xhci_num_interrupts_init(xhci, mmio, irq_cnt);
 
     // select our IRQ mode
-    status = pci_set_irq_mode(&pci, MX_PCIE_IRQ_MODE_MSI, xhci->num_interrupts);
+    status = pci_set_irq_mode(pci, MX_PCIE_IRQ_MODE_MSI, xhci->num_interrupts);
     if (status < 0) {
-        mx_status_t status_legacy = pci_set_irq_mode(&pci, MX_PCIE_IRQ_MODE_LEGACY, 1);
+        mx_status_t status_legacy = pci_set_irq_mode(pci, MX_PCIE_IRQ_MODE_LEGACY, 1);
 
         if (status_legacy < 0) {
             dprintf(ERROR, "usb_xhci_bind Failed to set IRQ mode to either MSI "
@@ -323,7 +325,7 @@ static mx_status_t usb_xhci_bind(void* ctx, mx_device_t* dev, void** cookie) {
 
     for (uint32_t i = 0; i < xhci->num_interrupts; i++) {
         // register for interrupts
-        status = pci_map_interrupt(&pci, i, &xhci->irq_handles[i]);
+        status = pci_map_interrupt(pci, i, &xhci->irq_handles[i]);
         if (status != MX_OK) {
             dprintf(ERROR, "usb_xhci_bind map_interrupt failed %d\n", status);
             goto error_return;
@@ -334,9 +336,9 @@ static mx_status_t usb_xhci_bind(void* ctx, mx_device_t* dev, void** cookie) {
     xhci->cfg_handle = cfg_handle;
 
     // stash this here for the startup thread to call device_add() with
-    xhci->parent = dev;
+    xhci->parent = parent;
     // used for enabling bus mastering
-    memcpy(&xhci->pci, &pci, sizeof(pci_protocol_t));
+    memcpy(&xhci->pci, pci, sizeof(pci_protocol_t));
 
     status = xhci_init(xhci, mmio);
     if (status != MX_OK) {
@@ -350,18 +352,80 @@ static mx_status_t usb_xhci_bind(void* ctx, mx_device_t* dev, void** cookie) {
     return MX_OK;
 
 error_return:
-    if (xhci) {
-        free(xhci);
-    }
+    free(xhci);
     for (uint32_t i = 0; i < num_irq_handles_initialized; i++) {
         mx_handle_close(xhci->irq_handles[i]);
     }
-    if (mmio_handle != MX_HANDLE_INVALID) {
-        mx_handle_close(mmio_handle);
+    mx_handle_close(mmio_handle);
+    mx_handle_close(cfg_handle);
+    return status;
+}
+
+
+static mx_status_t usb_xhci_bind_pdev(mx_device_t* parent, platform_device_protocol_t* pdev) {
+    mx_handle_t mmio_handle = MX_HANDLE_INVALID;
+    mx_handle_t irq_handle = MX_HANDLE_INVALID;
+    xhci_t* xhci = NULL;
+    mx_status_t status;
+
+    xhci = calloc(1, sizeof(xhci_t));
+    if (!xhci) {
+        status = MX_ERR_NO_MEMORY;
+        goto error_return;
     }
-    if (cfg_handle != MX_HANDLE_INVALID) {
-        mx_handle_close(cfg_handle);
+
+    void* mmio;
+    uint64_t mmio_len;
+    status = pdev_map_mmio(pdev, PDEV_MMIO_INDEX, MX_CACHE_POLICY_UNCACHED_DEVICE,
+                           &mmio, &mmio_len, &mmio_handle);
+    if (status != MX_OK) {
+        dprintf(ERROR, "usb_xhci_bind_pdev: pdev_map_mmio failed\n");
+        goto error_return;
     }
+
+    status = pdev_map_interrupt(pdev, PDEV_IRQ_INDEX, &irq_handle);
+    if (status != MX_OK) {
+        dprintf(ERROR, "usb_xhci_bind_pdev: pdev_map_interrupt failed\n");
+        goto error_return;
+    }
+
+    xhci->mmio_handle = mmio_handle;
+    xhci->irq_handles[0] = irq_handle;
+    xhci->num_interrupts = 1;
+
+    // stash this here for the startup thread to call device_add() with
+    xhci->parent = parent;
+
+    status = xhci_init(xhci, mmio);
+    if (status != MX_OK) {
+        goto error_return;
+    }
+
+    thrd_t thread;
+    thrd_create_with_name(&thread, xhci_start_thread, xhci, "xhci_start_thread");
+    thrd_detach(thread);
+
+    return MX_OK;
+
+error_return:
+    free(xhci);
+    mx_handle_close(mmio_handle);
+    mx_handle_close(irq_handle);
+    return status;
+}
+
+static mx_status_t usb_xhci_bind(void* ctx, mx_device_t* parent, void** cookie) {
+    pci_protocol_t pci;
+    platform_device_protocol_t pdev;
+    mx_status_t status;
+
+    if ((status = device_get_protocol(parent, MX_PROTOCOL_PCI, &pci)) == MX_OK) {
+        return usb_xhci_bind_pci(parent, &pci);
+    }
+    if ((status = device_get_protocol(parent, MX_PROTOCOL_PLATFORM_DEV, &pdev)) == MX_OK) {
+        return usb_xhci_bind_pdev(parent, &pdev);
+    }
+
     return status;
 }
 
@@ -371,9 +435,16 @@ static mx_driver_ops_t xhci_driver_ops = {
 };
 
 // clang-format off
-MAGENTA_DRIVER_BEGIN(usb_xhci, xhci_driver_ops, "magenta", "0.1", 4)
-    BI_ABORT_IF(NE, BIND_PROTOCOL, MX_PROTOCOL_PCI),
+MAGENTA_DRIVER_BEGIN(usb_xhci, xhci_driver_ops, "magenta", "0.1", 8)
+    // PCI binding support
+    BI_GOTO_IF(NE, BIND_PROTOCOL, MX_PROTOCOL_PCI, 0),
     BI_ABORT_IF(NE, BIND_PCI_CLASS, 0x0C),
     BI_ABORT_IF(NE, BIND_PCI_SUBCLASS, 0x03),
     BI_MATCH_IF(EQ, BIND_PCI_INTERFACE, 0x30),
+
+    // platform bus binding support
+    BI_LABEL(0),
+    BI_ABORT_IF(NE, BIND_PLATFORM_DEV_VID, PDEV_VID_GENERIC),
+    BI_ABORT_IF(NE, BIND_PLATFORM_DEV_PID, PDEV_PID_GENERIC),
+    BI_MATCH_IF(EQ, BIND_PLATFORM_DEV_DID, PDEV_DID_USB_XHCI),
 MAGENTA_DRIVER_END(usb_xhci)
