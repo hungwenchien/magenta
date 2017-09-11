@@ -90,9 +90,28 @@ static mx_status_t dwc3_start_peripheral_mode(dwc3_t* dwc) {
     temp |= GUSB3PIPECTL_LFPSFILTER | GUSB3PIPECTL_SS_TX_DE_EMPHASIS(1);
     DWC3_WRITE32(mmio + GUSB3PIPECTL(0), temp);
 
+#if 0
     // configure for device mode
     DWC3_WRITE32(mmio + GCTL, GCTL_U2EXIT_LFPS | GCTL_PRTCAPDIR_DEVICE | GCTL_U2RSTECN |
                               GCTL_PWRDNSCALE(2));
+#else
+    // configure for host mode
+    DWC3_WRITE32(mmio + GCTL, GCTL_U2EXIT_LFPS | GCTL_PRTCAPDIR_HOST | GCTL_U2RSTECN |
+                              GCTL_PWRDNSCALE(2));
+ 
+ 
+    temp = DWC3_READ32(mmio + OCFG);
+    temp |= (OCFG_DISPRTPWRCUTOFF | OCFG_OTGSFTRSTMSK);
+    temp &= ~(OCFG_HNPCAP | OCFG_SRPCAP);
+    DWC3_WRITE32(mmio + OCFG, temp);
+ 
+    temp = DWC3_READ32(mmio + OCTL);
+    temp |= OCTL_PRTPWRCTL;
+    temp &= ~OCTL_PERIMODE;
+    DWC3_WRITE32(mmio + OCTL, temp);
+ 
+                            
+#endif
 
     temp = DWC3_READ32(mmio + DCFG);
     uint32_t nump = 16;

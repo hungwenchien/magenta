@@ -2,11 +2,67 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <ddk/driver.h>
+#include <ddk/protocol/gpio.h>
 #include <hw/reg.h>
 #include <stdio.h>
 
 #include "hi3660-bus.h"
 #include "hi3660-regs.h"
+
+
+static mx_status_t hi3660_usb_set_host(hi3660_bus_t* bus, bool host) {
+    gpio_protocol_t gpio;
+    if (pdev_get_protocol(&bus->pdev, MX_PROTOCOL_GPIO, &gpio) != MX_OK) {
+        printf("hi3360_usb_init: could not get GPIO protocol!\n");
+        return MX_ERR_INTERNAL;
+    }
+
+    gpio_config(&gpio, 46, GPIO_DIR_OUT);
+    gpio_config(&gpio, 202, GPIO_DIR_OUT);
+    gpio_config(&gpio, 206, GPIO_DIR_OUT);
+    gpio_config(&gpio, 206, GPIO_DIR_OUT);
+
+unsigned gpio_46, gpio_202, gpio_206, gpio_150;
+gpio_read(&gpio, 46, &gpio_46);
+gpio_read(&gpio, 202, &gpio_202);
+gpio_read(&gpio, 206, &gpio_206);
+gpio_read(&gpio, 150, &gpio_150);
+printf("GPIO 46: %d\n", gpio_46);
+printf("GPIO 202: %d\n", gpio_202);
+printf("GPIO 206: %d\n", gpio_206);
+printf("GPIO 150: %d\n", gpio_150);
+
+    gpio_write(&gpio, 46, 1);
+    gpio_write(&gpio, 202, 1); // off
+    gpio_write(&gpio, 206, 1); // hub on
+
+gpio_read(&gpio, 46, &gpio_46);
+gpio_read(&gpio, 202, &gpio_202);
+gpio_read(&gpio, 206, &gpio_206);
+gpio_read(&gpio, 150, &gpio_150);
+printf("GPIO 46: %d\n", gpio_46);
+printf("GPIO 202: %d\n", gpio_202);
+printf("GPIO 206: %d\n", gpio_206);
+printf("GPIO 150: %d\n", gpio_150);
+
+/*
+    if (host) {
+        // disable type-c vbus
+        gpio_write(&gpio, 202, 0);
+        // enable host vbus
+        gpio_write(&gpio, 46, 1);
+        gpio_write(&gpio, 206, 1);
+    } else {
+        // disable host vbus
+        gpio_write(&gpio, 46, 0);
+        // enable type-c vbus
+        gpio_write(&gpio, 202, 1);
+    }
+*/
+    return MX_OK;
+}
+
 
 mx_status_t hi3360_usb_init(hi3660_bus_t* bus) {
     volatile void* usb3otg_bc = bus->usb3otg_bc.vaddr;
@@ -14,23 +70,8 @@ mx_status_t hi3360_usb_init(hi3660_bus_t* bus) {
     volatile void* pctrl = bus->pctrl.vaddr;
     uint32_t temp;
 
-/*
-    // this doesn't seem to be ncessesary now, but we might need to use these
-    // GPIOs when switching between host and device mode
+    hi3660_usb_set_host(bus, true);
 
-    gpio_protocol_t gpio;
-    if (pdev_get_protocol(&bus->pdev, MX_PROTOCOL_GPIO, &gpio) != MX_OK) {
-        printf("hi3360_usb_init: could not get GPIO protocol!\n");
-        return MX_ERR_INTERNAL;
-    }
-
-    // disable host vbus
-    gpio_config(&gpio, 46, GPIO_DIR_OUT);
-    gpio_write(&gpio, 46, 0);
-    // enable type-c vbus
-    gpio_config(&gpio, 202, GPIO_DIR_OUT);
-    gpio_write(&gpio, 202, 1);
-*/
     writel(PERI_CRG_ISODIS_REFCLK_ISO_EN, peri_crg + PERI_CRG_ISODIS);
     writel(PCTRL_CTRL3_USB_TCXO_EN | (PCTRL_CTRL3_USB_TCXO_EN << PCTRL_CTRL3_MSK_START),
            pctrl + PCTRL_CTRL3);
