@@ -16,3 +16,4 @@ typedef struct {
 } hi3660_bus_t;
 
 mx_status_t hi3360_usb_init(hi3660_bus_t* bus);
+mx_status_t hi3360_pcie_init(void);

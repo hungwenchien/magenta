@@ -253,6 +253,10 @@ static mx_status_t hi3660_bind(void* ctx, mx_device_t* parent, void** cookie) {
         printf("hi3660_bind: hi3360_usb_init failed!\n");;
     }
 
+    if ((status = hi3360_pcie_init()) != MX_OK) {
+        printf("hi3660_bind: hi3360_pcie_init failed!\n");;
+    }
+
     return MX_OK;
 
 fail:
