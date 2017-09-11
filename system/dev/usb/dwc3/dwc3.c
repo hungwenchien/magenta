@@ -110,7 +110,17 @@ static mx_status_t dwc3_start_peripheral_mode(dwc3_t* dwc) {
     temp &= ~OCTL_PERIMODE;
     DWC3_WRITE32(mmio + OCTL, temp);
  
-                            
+printf("OCFG: 0x%X\n", DWC3_READ32(mmio + OCFG));
+printf("OCTL: 0x%X\n", DWC3_READ32(mmio + OCTL));
+printf("OEVT: 0x%X\n", DWC3_READ32(mmio + OEVT));
+printf("OEVTEN: 0x%X\n", DWC3_READ32(mmio + OEVTEN));
+printf("OSTS: 0x%X\n", DWC3_READ32(mmio + OSTS));
+printf("BCFG: 0x%X\n", DWC3_READ32(mmio + BCFG));
+printf("BCEVT: 0x%X\n", DWC3_READ32(mmio + BCEVT));
+printf("BCEVTEN: 0x%X\n", DWC3_READ32(mmio + BCEVTEN));
+
+
+                          
 #endif
 
     temp = DWC3_READ32(mmio + DCFG);
@@ -123,7 +133,7 @@ static mx_status_t dwc3_start_peripheral_mode(dwc3_t* dwc) {
     temp &= ~DWC3_MASK(DCFG_DEVADDR_START, DCFG_DEVADDR_BITS);  // clear address
     DWC3_WRITE32(mmio + DCFG, temp);
 
-    dwc3_events_start(dwc);
+//    dwc3_events_start(dwc);
     mtx_unlock(&dwc->lock);
 
     dwc3_ep0_start(dwc);

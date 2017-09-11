@@ -451,6 +451,7 @@ mx_status_t xhci_queue_transfer(xhci_t* xhci, iotxn_t* txn) {
     uint8_t ep_index = xhci_endpoint_index(proto_data->ep_address);
     __UNUSED usb_setup_t* setup = (ep_index == 0 ? &proto_data->setup : NULL);
 
+if (slot_id < 128)
     dprintf(LTRACE, "xhci_queue_transfer slot_id: %d setup: %p ep_index: %d length: %lu\n",
             slot_id, setup, ep_index, txn->length);
 

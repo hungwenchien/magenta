@@ -132,7 +132,6 @@ platform = {
             }
         }
     }
-/*
     device = {
         name = "dwc3"
         vid = PDEV_VID_GENERIC
@@ -147,7 +146,7 @@ platform = {
         }
         irqs = [191]
     }
-*/
+/*
     device = {
         name = "dwc3-xhci"
         vid = PDEV_VID_GENERIC
@@ -162,4 +161,5 @@ platform = {
         }
         irqs = [191]
     }
+*/
 }

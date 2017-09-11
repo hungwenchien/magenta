@@ -581,15 +581,19 @@ static void xhci_handle_events(xhci_t* xhci, int interrupter) {
         uint32_t type = trb_get_type(er->current);
         switch (type) {
         case TRB_EVENT_COMMAND_COMP:
+            dprintf(LTRACE, "TRB_EVENT_COMMAND_COMP\n");
             xhci_handle_command_complete_event(xhci, er->current);
             break;
         case TRB_EVENT_PORT_STATUS_CHANGE:
+            dprintf(LTRACE, "TRB_EVENT_PORT_STATUS_CHANGE\n");
             // ignore, these are dealt with in xhci_handle_interrupt() below
             break;
         case TRB_EVENT_TRANSFER:
+            dprintf(LTRACE, "TRB_EVENT_TRANSFER\n");
             xhci_handle_transfer_event(xhci, er->current);
             break;
         case TRB_EVENT_MFINDEX_WRAP:
+            dprintf(LTRACE, "TRB_EVENT_MFINDEX_WRAP\n");
             xhci_handle_mfindex_wrap(xhci);
             break;
         default:

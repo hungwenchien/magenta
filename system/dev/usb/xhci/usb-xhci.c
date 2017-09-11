@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <threads.h>
+#include <unistd.h>
 
 #include "xhci-device-manager.h"
 #include "xhci-root-hub.h"
@@ -182,7 +183,7 @@ typedef struct completer {
 
 static int completer_thread(void *arg) {
     completer_t* completer = (completer_t*)arg;
-    mx_handle_t irq_handle = completer->xhci->irq_handles[completer->interrupter];
+    __UNUSED mx_handle_t irq_handle = completer->xhci->irq_handles[completer->interrupter];
 
     // TODO(johngro) : See MG-940.  Get rid of this.  For now we need thread
     // priorities so that realtime transactions use the completer which ends
@@ -190,8 +191,9 @@ static int completer_thread(void *arg) {
     mx_thread_set_priority(completer->priority);
 
     while (1) {
+/*
         mx_status_t wait_res;
-
+printf("xhci wait IRQ\n");   
         wait_res = mx_interrupt_wait(irq_handle);
         if (wait_res != MX_OK) {
             dprintf(ERROR, "unexpected pci_wait_interrupt failure (%d)\n", wait_res);
@@ -199,6 +201,11 @@ static int completer_thread(void *arg) {
             break;
         }
         mx_interrupt_complete(irq_handle);
+        
+printf("xhci got IRQ\n");
+*/
+usleep(1000 * 10);
+
         xhci_handle_interrupt(completer->xhci, completer->xhci->legacy_irq_mode,
                               completer->interrupter);
     }
@@ -418,6 +425,8 @@ static mx_status_t usb_xhci_bind(void* ctx, mx_device_t* parent, void** cookie) 
     pci_protocol_t pci;
     platform_device_protocol_t pdev;
     mx_status_t status;
+
+driver_set_log_flags(DDK_LOG_ERROR | DDK_LOG_INFO | DDK_LOG_TRACE | DDK_LOG_SPEW);
 
     if ((status = device_get_protocol(parent, MX_PROTOCOL_PCI, &pci)) == MX_OK) {
         return usb_xhci_bind_pci(parent, &pci);
