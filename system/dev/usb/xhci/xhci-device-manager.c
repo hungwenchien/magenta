@@ -140,12 +140,15 @@ static mx_status_t xhci_address_device(xhci_t* xhci, uint32_t slot_id, uint32_t 
     // install our device context for the slot
     XHCI_WRITE64(&xhci->dcbaa[slot_id], io_buffer_phys(&slot->buffer));
 
+    io_buffer_cache_op(&slot->buffer, MX_VMO_OP_CACHE_CLEAN, 0, slot->buffer.size);
+    mx_vmo_op_range(xhci->dcbaa_erst_handle, MX_VMO_OP_CACHE_CLEAN, 0, 4096, NULL, 0);
+    mx_vmo_op_range(xhci->input_context_handle, MX_VMO_OP_CACHE_CLEAN, 0, 4096, NULL, 0);
 
     status = xhci_send_command(xhci, TRB_CMD_ADDRESS_DEVICE, icc_phys,
                                    (slot_id << TRB_SLOT_ID_START) | TRB_BSR);
 
     if (status != MX_OK) {
-        printf("TRB_CMD_ADDRESS_DEVICE failed\n");
+        printf("TRB_CMD_ADDRESS_DEVICE TRB_BSR failed\n");
         mtx_unlock(&xhci->input_context_lock);
         return status;
     }
@@ -171,6 +174,10 @@ static mx_status_t xhci_address_device(xhci_t* xhci, uint32_t slot_id, uint32_t 
         mtx_unlock(&xhci->input_context_lock);
         return status;
     }
+
+printf("bLength: %u bDescriptorType %u bcdUSB %x bDeviceClass %u bDeviceSubClass %u bDeviceProtocol %u  bMaxPacketSize0 %u\n",
+       device_descriptor.bLength, device_descriptor.bDescriptorType, device_descriptor.bcdUSB, device_descriptor.bDeviceClass,
+       device_descriptor.bDeviceSubClass, device_descriptor.bDeviceProtocol, device_descriptor.bMaxPacketSize0); 
 
     int mps = device_descriptor.bMaxPacketSize0;
     // enforce correct max packet size for ep0
