@@ -521,6 +521,8 @@ void xhci_post_command(xhci_t* xhci, uint32_t command, uint64_t ptr, uint32_t co
 
     xhci_increment_ring(cr);
 
+    io_buffer_cache_op(&xhci->command_ring.buffer, MX_VMO_OP_CACHE_CLEAN,
+                           0, xhci->command_ring.buffer.size);
     XHCI_WRITE32(&xhci->doorbells[0], 0);
 
     mtx_unlock(&xhci->command_ring_lock);
@@ -575,6 +577,8 @@ uint64_t xhci_get_current_frame(xhci_t* xhci) {
 
 static void xhci_handle_events(xhci_t* xhci, int interrupter) {
     xhci_event_ring_t* er = &xhci->event_rings[interrupter];
+
+    io_buffer_cache_op(&er->buffer, MX_VMO_OP_CACHE_INVALIDATE, 0, er->buffer.size);
 
     // process all TRBs with cycle bit matching our CCS
     while ((XHCI_READ32(&er->current->control) & TRB_C) == er->ccs) {

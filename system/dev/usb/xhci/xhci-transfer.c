@@ -267,12 +267,17 @@ static mx_status_t xhci_continue_transfer_locked(xhci_t* xhci, xhci_endpoint_t* 
         }
     }
 
+        if (direction == USB_DIR_OUT) {
+            iotxn_cacheop(txn, IOTXN_CACHE_CLEAN, 0, txn->length);
+        }
+
     // Data Stage
     mx_paddr_t paddr;
     size_t transfer_size = 0;
     bool first_packet = (state->phys_iter.offset == 0);
     while (free_trbs > 0 && (((transfer_size = iotxn_phys_iter_next(&state->phys_iter, &paddr)) > 0) ||
                              state->needs_transfer_trb)) {
+
         xhci_trb_t* trb = ring->current;
         xhci_clear_trb(trb);
         XHCI_WRITE64(&trb->ptr, paddr);
@@ -387,6 +392,8 @@ static mx_status_t xhci_continue_transfer_locked(xhci_t* xhci, xhci_endpoint_t* 
     // if we get here, then we are ready to ring the doorbell
     // update dequeue_ptr to TRB following this transaction
     txn->context = (void *)ring->current;
+
+    io_buffer_cache_op(&ring->buffer, MX_VMO_OP_CACHE_CLEAN, 0, ring->buffer.size);
 
     XHCI_WRITE32(&xhci->doorbells[proto_data->device_id], ep_index + 1);
     // it seems we need to ring the doorbell a second time when transitioning from STOPPED
@@ -826,6 +833,12 @@ void xhci_handle_transfer_event(xhci_t* xhci, xhci_trb_t* trb) {
 
     // call complete callbacks out of the lock
     while ((txn = list_remove_head_type(&completed_txns, iotxn_t, node)) != NULL) {
+
+        usb_protocol_data_t* proto_data = iotxn_pdata(txn, usb_protocol_data_t);
+        if ((proto_data->ep_address & USB_ENDPOINT_DIR_MASK) == USB_DIR_IN) {
+            iotxn_cacheop(txn, MX_VMO_OP_CACHE_INVALIDATE, 0, txn->length);
+        }
+
         iotxn_complete(txn, txn->status, txn->actual);
     }
 }

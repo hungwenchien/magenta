@@ -141,6 +141,10 @@ static mx_status_t xhci_address_device(xhci_t* xhci, uint32_t slot_id, uint32_t 
     XHCI_WRITE64(&xhci->dcbaa[slot_id], io_buffer_phys(&slot->buffer));
     // then send the address device command
 
+    io_buffer_cache_op(&slot->buffer, MX_VMO_OP_CACHE_CLEAN, 0, slot->buffer.size);
+    mx_vmo_op_range(xhci->dcbaa_erst_handle, MX_VMO_OP_CACHE_CLEAN, 0, 4096, NULL, 0);
+    mx_vmo_op_range(xhci->input_context_handle, MX_VMO_OP_CACHE_CLEAN, 0, 4096, NULL, 0);
+
     for (int i = 0; i < 5; i++) {
         status = xhci_send_command(xhci, TRB_CMD_ADDRESS_DEVICE, icc_phys,
                                    (slot_id << TRB_SLOT_ID_START));
@@ -288,6 +292,8 @@ static mx_status_t xhci_handle_enumerate_device(xhci_t* xhci, uint32_t hub_addre
     XHCI_WRITE32(&icc->add_context_flags, XHCI_ICC_EP_FLAG(0));
     XHCI_SET_BITS32(&ep0c->epc1, EP_CTX_MAX_PACKET_SIZE_START, EP_CTX_MAX_PACKET_SIZE_BITS, mps);
 
+    mx_vmo_op_range(xhci->input_context_handle, MX_VMO_OP_CACHE_CLEAN, 0, 4096, NULL, 0);
+
     result = xhci_send_command(xhci, TRB_CMD_EVAL_CONTEXT, icc_phys,
                                (slot_id << TRB_SLOT_ID_START));
     mtx_unlock(&xhci->input_context_lock);
@@ -396,6 +402,8 @@ static mx_status_t xhci_handle_disconnect_device(xhci_t* xhci, uint32_t hub_addr
     mx_paddr_t icc_phys = xhci->input_context_phys;
     memset((void*)icc, 0, xhci->context_size);
     XHCI_WRITE32(&icc->drop_context_flags, drop_flags);
+
+    mx_vmo_op_range(xhci->input_context_handle, MX_VMO_OP_CACHE_CLEAN, 0, 4096, NULL, 0);
 
     mx_status_t status = xhci_send_command(xhci, TRB_CMD_CONFIGURE_EP, icc_phys,
                                            (slot_id << TRB_SLOT_ID_START));
@@ -593,6 +601,8 @@ mx_status_t xhci_enable_endpoint(xhci_t* xhci, uint32_t slot_id, usb_endpoint_de
         XHCI_WRITE32(&icc->drop_context_flags, XHCI_ICC_EP_FLAG(index));
     }
 
+    mx_vmo_op_range(xhci->input_context_handle, MX_VMO_OP_CACHE_CLEAN, 0, 4096, NULL, 0);
+
     mx_status_t status = xhci_send_command(xhci, TRB_CMD_CONFIGURE_EP, icc_phys,
                                            (slot_id << TRB_SLOT_ID_START));
     mtx_unlock(&xhci->input_context_lock);
@@ -643,6 +653,8 @@ mx_status_t xhci_configure_hub(xhci_t* xhci, uint32_t slot_id, usb_speed_t speed
                     num_ports);
     XHCI_SET_BITS32(&sc->sc2, SLOT_CTX_TTT_START, SLOT_CTX_TTT_BITS, ttt);
 
+
+    mx_vmo_op_range(xhci->input_context_handle, MX_VMO_OP_CACHE_CLEAN, 0, 4096, NULL, 0);
 
     mx_status_t status = xhci_send_command(xhci, TRB_CMD_EVAL_CONTEXT, icc_phys,
                                            (slot_id << TRB_SLOT_ID_START));

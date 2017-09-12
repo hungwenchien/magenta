@@ -191,7 +191,7 @@ static int completer_thread(void *arg) {
     mx_thread_set_priority(completer->priority);
 
     while (1) {
-/*
+#if 0
         mx_status_t wait_res;
 printf("xhci wait IRQ\n");   
         wait_res = mx_interrupt_wait(irq_handle);
@@ -203,9 +203,9 @@ printf("xhci wait IRQ\n");
         mx_interrupt_complete(irq_handle);
         
 printf("xhci got IRQ\n");
-*/
-usleep(1000 * 10);
-
+#else
+usleep(1000);
+#endif
         xhci_handle_interrupt(completer->xhci, completer->xhci->legacy_irq_mode,
                               completer->interrupter);
     }

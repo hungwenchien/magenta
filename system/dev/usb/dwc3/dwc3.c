@@ -83,12 +83,14 @@ static mx_status_t dwc3_start_peripheral_mode(dwc3_t* dwc) {
     temp = DWC3_READ32(mmio + GUSB2PHYCFG(0));
     temp &= ~(GUSB2PHYCFG_USBTRDTIM_MASK | GUSB2PHYCFG_SUSPENDUSB20);
     temp |= GUSB2PHYCFG_USBTRDTIM(9);
-    DWC3_WRITE32(mmio + GUSB2PHYCFG(0), temp);
+//    DWC3_WRITE32(mmio + GUSB2PHYCFG(0), temp);
+    DWC3_WRITE32(mmio + GUSB2PHYCFG(0), 0x40102440);
 
     temp = DWC3_READ32(mmio + GUSB3PIPECTL(0));
     temp &= ~(GUSB3PIPECTL_DELAYP1TRANS | GUSB3PIPECTL_SUSPENDENABLE);
     temp |= GUSB3PIPECTL_LFPSFILTER | GUSB3PIPECTL_SS_TX_DE_EMPHASIS(1);
-    DWC3_WRITE32(mmio + GUSB3PIPECTL(0), temp);
+//    DWC3_WRITE32(mmio + GUSB3PIPECTL(0), temp);
+    DWC3_WRITE32(mmio + GUSB3PIPECTL(0), 0x10E0002);
 
 #if 0
     // configure for device mode
